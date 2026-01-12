@@ -1,0 +1,38 @@
+name: Arca Raffle Logic
+
+on:
+  repository_dispatch:
+    types: [draw_trigger] # Cloudflare Worker에서 이 타입으로 보냄
+
+permissions:
+  contents: write # 리포지토리에 결과를 저장(commit)해야 하므로 쓰기 권한 필요
+
+jobs:
+  run-raffle:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Run Raffle Script
+      id: raffle
+      # client_payload 전체를 JSON 문자열로 파이썬 스크립트에 전달
+      run: |
+        python raffle.py '${{ toJson(github.event.client_payload) }}'
+      
+    - name: Commit and Push Results
+      run: |
+        git config --global user.name "Raffle Bot"
+        git config --global user.email "bot@noreply.github.com"
+        git add data/results.json data/archive/
+        
+        # 변경 사항이 있을 때만 커밋
+        timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        git commit -m "Raffle Result: $timestamp [skip ci]" || exit 0
+        git push
