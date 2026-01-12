@@ -95,6 +95,22 @@ def manage_archives():
 
     print(f"아카이브 시작: {target_year}년 Q{target_q} (대상 월: {start_month}~{end_month-1}월)")
 
+    # 오래된 아카이브 삭제 로직 (2년/8분기 전 데이터 삭제)
+    # 예: 현재 2026_Q1이면 2024_Q1 이전(미만) 파일 삭제
+    if os.path.exists(ARCHIVE_DIR):
+        retention_year = target_year - 2
+        # 삭제 기준이 될 파일명 생성 (예: archive_2024_Q1.json)
+        limit_filename = f"archive_{retention_year}_Q{target_q}.json"
+        
+        print(f"오래된 데이터 정리 중... (기준: {limit_filename} 미만 삭제)")
+        
+        for filename in os.listdir(ARCHIVE_DIR):
+            if filename.startswith("archive_") and filename.endswith(".json"):
+                # 문자열 비교: archive_2023_Q4.json < archive_2024_Q1.json 이므로 삭제됨
+                if filename < limit_filename:
+                    os.remove(os.path.join(ARCHIVE_DIR, filename))
+                    print(f"삭제됨: {filename}")
+
     # 데이터 로드
     with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
         try:
