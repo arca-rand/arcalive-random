@@ -1,0 +1,41 @@
+name: Quarterly Archive Maintenance
+
+on:
+  schedule:
+    # 한국시간(KST) 15일 새벽 04:00에 실행하기 위해
+    # UTC 기준 14일 19:00 설정 (1, 4, 7, 10월)
+    - cron: '0 19 14 1,4,7,10 *'
+  workflow_dispatch: # 관리자가 수동으로 버튼 눌러 실행 가능
+
+# 동일한 그룹의 작업이 돌고 있으면 대기시킴 (데이터 꼬임 방지)
+concurrency:
+  group: raffle-operation
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Run Archive Logic
+        # maintenance 플래그를 넣어 호출
+        run: |
+          python raffle.py '{"maintenance": true}'
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "Archive Bot"
+          git config --global user.email "bot@noreply.github.com"
+          git add data/
+          git commit -m "Quarterly Archive Cleanup (KST 15th 04:00) [skip ci]" || exit 0
+          git push
