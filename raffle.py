@@ -130,7 +130,6 @@ def main():
         "timestamp": public_seed, # 공개 시드 역할
         "winners": winners,
         "requester": input_data.get('requester'),
-        "participant_count": len(final_pool),
         "participants": final_pool, # 실제 추첨 대상이 된 목록
         "excludes": excludes,
         "result_seed": result_seed, # 결과 검증용 핵심 키
