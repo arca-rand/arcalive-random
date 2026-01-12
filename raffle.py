@@ -106,4 +106,107 @@ def manage_archives():
         return
 
     to_archive = []
-    to_
+    to_keep = []
+
+    # 데이터 분류
+    for entry in data:
+        try:
+            entry_time = datetime.datetime.fromisoformat(entry['timestamp'])
+            # 해당 분기 데이터인지 확인
+            if (entry_time.year == target_year and 
+                start_month <= entry_time.month < end_month):
+                to_archive.append(entry)
+            else:
+                to_keep.append(entry)
+        except (ValueError, KeyError):
+            to_keep.append(entry)
+
+    if not to_archive:
+        print("해당 분기에 아카이브할 데이터가 없습니다.")
+        return
+
+    # 아카이브 저장
+    os.makedirs(ARCHIVE_DIR, exist_ok=True)
+    archive_filename = f"archive_{target_year}_Q{target_q}.json"
+    archive_path = os.path.join(ARCHIVE_DIR, archive_filename)
+
+    # 기존 아카이브 파일이 있으면 합침
+    final_archive_data = to_archive
+    if os.path.exists(archive_path):
+        with open(archive_path, 'r', encoding='utf-8') as f:
+            try:
+                existing = json.load(f)
+                final_archive_data = existing + to_archive
+            except:
+                pass
+
+    with open(archive_path, 'w', encoding='utf-8') as f:
+        json.dump(final_archive_data, f, indent=2, ensure_ascii=False)
+    
+    # 메인 파일 업데이트 (남은 데이터 저장)
+    with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(to_keep, f, indent=2, ensure_ascii=False)
+    
+    print(f"총 {len(to_archive)}개의 항목을 {archive_filename}으로 이동했습니다.")
+
+def main():
+    # GitHub Actions에서 보낸 인자(JSON) 읽기
+    try:
+        input_json_str = sys.argv[1]
+        input_data = json.loads(input_json_str)
+    except (IndexError, json.JSONDecodeError):
+        input_data = {}
+
+    # [유지보수 모드] maintenance 플래그가 true면 관리 로직만 수행 후 종료
+    if input_data.get('maintenance') is True:
+        print("유지보수 모드로 실행합니다...")
+        manage_archives()
+        sys.exit(0)
+
+    # [추첨 모드] 데이터 추출
+    secret_seed_input = input_data.get('secret_seed', '')
+    participants = input_data.get('participants', [])
+    excludes = input_data.get('excludes', [])
+    winner_count = int(input_data.get('winner_count', 1))
+    
+    if not participants:
+        print("참여자가 없어 추첨을 중단합니다.")
+        sys.exit(0)
+
+    # 시드 생성 및 추첨 실행
+    public_seed, result_seed = generate_seeds(secret_seed_input)
+    winners, final_pool = pick_winners(participants, excludes, winner_count, result_seed)
+
+    # 결과 엔트리 생성 (요청에 따라 requester, participant_count 제거)
+    result_entry = {
+        "id": f"{int(datetime.datetime.now().timestamp())}", # 고유 식별자
+        "git_version": get_git_revision_hash(),             # 코드 버전 기록
+        "timestamp": public_seed,                           # 공개 시드 (실행 시간)
+        "winners": winners,                                 # 당첨자 목록
+        "participants": final_pool,                         # 최종 참여자 명단
+        "excludes": excludes,                               # 제외 명단
+        "result_seed": result_seed,                         # 검증용 최종 시드
+        "link": input_data.get('link')                      # 원문 링크
+    }
+
+    # 결과 저장
+    if not os.path.exists('data'):
+        os.makedirs('data')
+        
+    current_data = []
+    if os.path.exists(RESULTS_FILE):
+        with open(RESULTS_FILE, 'r', encoding='utf-8') as f:
+            try:
+                current_data = json.load(f)
+            except json.JSONDecodeError:
+                current_data = []
+
+    current_data.append(result_entry)
+
+    with open(RESULTS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(current_data, f, indent=2, ensure_ascii=False)
+    
+    print(f"추첨 완료. 당첨자: {winners}")
+
+if __name__ == "__main__":
+    main()
